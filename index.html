@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>발표자 뽑기</title>
+<style>
+  :root {
+    --bg: #111827;
+    --panel: #1f2937;
+    --line: #374151;
+    --text: #f9fafb;
+    --muted: #9ca3af;
+    --accent: #facc15;
+    --accent-dark: #1f2937;
+    --danger: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo",
+                 "Noto Sans KR", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── 무대 ───────────────────────────────────────── */
+  #stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    padding: 2vh 3vw;
+    text-align: center;
+  }
+
+  #name {
+    font-size: clamp(3rem, 18vw, 20rem);
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    word-break: keep-all;
+    max-width: 100%;
+    color: var(--accent);
+  }
+
+  #name.idle {
+    color: var(--muted);
+    font-size: clamp(2rem, 7vw, 7rem);
+    font-weight: 700;
+  }
+
+  /* 이름이 빠르게 바뀌는 동안에는 흰색으로, 결정되면 노란색으로 바뀐다. */
+  #name.rolling {
+    color: var(--text);
+    opacity: 0.8;
+  }
+
+  /* 결정된 뒤 한 번 크게 부풀었다가 제자리로 */
+  #name.pop { animation: pop 620ms cubic-bezier(.22, .9, .3, 1); }
+
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.28); }
+    70%  { transform: scale(0.97); }
+    100% { transform: scale(1); }
+  }
+
+  #count {
+    font-size: clamp(1.25rem, 3vw, 3rem);
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  #count b { color: var(--text); }
+
+  #lastPick {
+    font-size: clamp(0.95rem, 1.6vw, 1.6rem);
+    font-weight: 700;
+    color: var(--accent-dark);
+    background: var(--accent);
+    border-radius: 999px;
+    padding: 0.35em 1.1em;
+  }
+
+  /* ── 버튼 영역 ───────────────────────────────────── */
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: clamp(0.5rem, 1.5vw, 1.25rem);
+    padding: 0 3vw clamp(1rem, 3vh, 2.5rem);
+  }
+
+  button {
+    font-family: inherit;
+    font-weight: 800;
+    font-size: clamp(1.1rem, 2.2vw, 2.25rem);
+    min-height: clamp(3.5rem, 8vh, 6rem);
+    padding: 0 clamp(1.25rem, 3vw, 3rem);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: transform 120ms ease, filter 120ms ease;
+  }
+
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:focus-visible { outline: 4px solid #60a5fa; outline-offset: 3px; }
+
+  #drawBtn {
+    background: var(--accent);
+    color: var(--accent-dark);
+    flex: 1 1 auto;
+    max-width: 40rem;
+    font-size: clamp(1.4rem, 3.2vw, 3.25rem);
+  }
+
+  .secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--line);
+  }
+
+  .secondary.highlight {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── 명단 편집 패널 ───────────────────────────────── */
+  #panel {
+    display: block;
+    background: var(--panel);
+    border-top: 3px solid var(--line);
+    padding: clamp(1rem, 3vh, 2rem) clamp(1rem, 4vw, 3rem);
+    max-height: 55vh;
+    overflow-y: auto;
+  }
+
+  #panel[hidden] { display: none; }
+
+  #panel h2 {
+    margin: 0 0 0.5em;
+    font-size: clamp(1.1rem, 2vw, 2rem);
+  }
+
+  #panel .hint {
+    margin: 0 0 0.75em;
+    color: var(--muted);
+    font-size: clamp(0.9rem, 1.3vw, 1.35rem);
+  }
+
+  #names {
+    width: 100%;
+    min-height: 8em;
+    background: #111827;
+    color: var(--text);
+    border: 2px solid var(--line);
+    border-radius: 0.75rem;
+    padding: 0.75em;
+    font-family: inherit;
+    font-size: clamp(1rem, 1.6vw, 1.6rem);
+    line-height: 1.6;
+    resize: vertical;
+  }
+
+  #names:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  #panelActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  #saveBtn {
+    background: var(--accent);
+    color: var(--accent-dark);
+  }
+
+  #drawnWrap { margin-top: 1.5rem; }
+
+  #drawnWrap h3 {
+    margin: 0 0 0.5em;
+    font-size: clamp(1rem, 1.6vw, 1.6rem);
+    color: var(--muted);
+  }
+
+  #drawnList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  #drawnList li {
+    background: #111827;
+    border: 2px solid var(--line);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 0.35em 0.9em;
+    font-size: clamp(0.95rem, 1.5vw, 1.5rem);
+    font-weight: 700;
+  }
+
+  #drawnList li:first-child {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 2rem;
+    transform: translateX(-50%);
+    background: var(--danger);
+    color: #111827;
+    font-weight: 800;
+    font-size: clamp(1rem, 1.8vw, 1.75rem);
+    padding: 0.7em 1.4em;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+
+  #toast.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<main id="stage">
+  <div id="name" class="idle">버튼을 눌러 주세요</div>
+  <div id="count"></div>
+  <div id="lastPick" hidden></div>
+</main>
+
+<div id="controls">
+  <button id="drawBtn">🎲 뽑기</button>
+  <button id="resetBtn" class="secondary">↺ 처음으로</button>
+  <button id="editBtn" class="secondary">✎ 명단 편집</button>
+</div>
+
+<section id="panel" hidden>
+  <h2>학생 명단</h2>
+  <p class="hint">한 줄에 한 명씩 적어 주세요. 쉼표로 구분해도 됩니다. (저장하면 뽑기 기록이 초기화됩니다)</p>
+  <textarea id="names" spellcheck="false" placeholder="김민준&#10;이서연&#10;박지호"></textarea>
+  <div id="panelActions">
+    <button id="saveBtn">명단 저장</button>
+    <button id="cancelBtn" class="secondary">취소</button>
+  </div>
+  <div id="drawnWrap" hidden>
+    <h3>이미 뽑힌 학생</h3>
+    <ul id="drawnList"></ul>
+  </div>
+</section>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "classPicker.v1";
+  var ROLL_MS = 2000;   // 이름이 바뀌는 시간
+  var ROLL_MIN = 45;    // 처음 바뀌는 간격(ms)
+  var ROLL_MAX = 330;   // 멈추기 직전 간격(ms)
+
+  var el = {
+    name: document.getElementById("name"),
+    count: document.getElementById("count"),
+    drawBtn: document.getElementById("drawBtn"),
+    resetBtn: document.getElementById("resetBtn"),
+    editBtn: document.getElementById("editBtn"),
+    panel: document.getElementById("panel"),
+    names: document.getElementById("names"),
+    saveBtn: document.getElementById("saveBtn"),
+    cancelBtn: document.getElementById("cancelBtn"),
+    drawnWrap: document.getElementById("drawnWrap"),
+    drawnList: document.getElementById("drawnList"),
+    lastPick: document.getElementById("lastPick"),
+    toast: document.getElementById("toast")
+  };
+
+  // 동명이인을 허용하기 위해 이름이 아니라 인덱스(id)로 뽑힘 여부를 관리한다.
+  var state = { names: [], drawnIds: [], lastName: "" };
+  var rolling = false;
+
+  /* ── 저장/복원 ─────────────────────────────────── */
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (!saved || !Array.isArray(saved.names)) return;
+      state.names = saved.names.filter(function (n) { return typeof n === "string"; });
+      state.drawnIds = (Array.isArray(saved.drawnIds) ? saved.drawnIds : [])
+        .filter(function (id) { return Number.isInteger(id) && id >= 0 && id < state.names.length; });
+      state.lastName = typeof saved.lastName === "string" ? saved.lastName : "";
+    } catch (e) {
+      // 저장이 막힌 브라우저(사생활 보호 모드 등)에서도 메모리 상태로 동작한다.
+    }
+  }
+
+  // file:/// 로 열거나 사생활 보호 모드일 때는 브라우저가 저장을 막을 수 있다.
+  // 앱은 그대로 동작하되, 명단이 남지 않는다는 사실을 한 번만 알려 준다.
+  var storageWarned = false;
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 뽑기처럼 조용히 저장되는 경로에서는 실패를 한 번만 알린다.
+  function saveOrWarn() {
+    if (save() || storageWarned) return;
+    storageWarned = true;
+    toast("이 브라우저에서는 명단이 저장되지 않습니다. 창을 닫으면 사라집니다.");
+  }
+
+  /* ── 화면 갱신 ─────────────────────────────────── */
+
+  function remainingIds() {
+    var ids = [];
+    for (var i = 0; i < state.names.length; i++) {
+      if (state.drawnIds.indexOf(i) === -1) ids.push(i);
+    }
+    return ids;
+  }
+
+  function allIds() {
+    var ids = [];
+    for (var i = 0; i < state.names.length; i++) ids.push(i);
+    return ids;
+  }
+
+  function setName(text, idle) {
+    el.name.textContent = text;
+    el.name.classList.toggle("idle", !!idle);
+  }
+
+  function render() {
+    var total = state.names.length;
+    var left = remainingIds().length;
+    var done = total > 0 && left === 0;
+
+    if (total === 0) {
+      el.count.textContent = "명단이 비어 있습니다";
+    } else if (done) {
+      // 마지막에 뽑힌 이름은 무대에 그대로 두고, 안내는 아래 줄에 표시한다.
+      el.count.innerHTML = "🎉 <b>" + total + "</b>명 모두 뽑았습니다";
+    } else {
+      el.count.innerHTML = "남은 학생 <b>" + left + "</b>명 / 전체 <b>" + total + "</b>명";
+    }
+
+    el.drawBtn.disabled = rolling || done;
+    el.resetBtn.classList.toggle("highlight", done);
+
+    if (!rolling) {
+      if (state.lastName) {
+        setName(state.lastName, false);
+      } else {
+        setName(total === 0 ? "명단을 입력해 주세요" : "버튼을 눌러 주세요", true);
+      }
+    }
+
+    // 방금 뽑힌 학생을 무대 아래 배지에 남겨 둔다. 초기화하면 함께 사라진다.
+    if (state.lastName) {
+      el.lastPick.textContent = "방금 뽑힘 · " + state.lastName;
+      el.lastPick.hidden = false;
+    } else {
+      el.lastPick.hidden = true;
+    }
+
+    // 최근에 뽑힌 학생이 맨 앞에 오도록 역순으로 표시
+    el.drawnWrap.hidden = state.drawnIds.length === 0;
+    el.drawnList.innerHTML = "";
+    for (var i = state.drawnIds.length - 1; i >= 0; i--) {
+      var li = document.createElement("li");
+      li.textContent = state.names[state.drawnIds[i]];
+      el.drawnList.appendChild(li);
+    }
+  }
+
+  var toastTimer = null;
+  function toast(message) {
+    el.toast.textContent = message;
+    el.toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.toast.classList.remove("show"); }, 2400);
+  }
+
+  /* ── 뽑기 ──────────────────────────────────────── */
+
+  function randomIndex(size) {
+    if (window.crypto && window.crypto.getRandomValues) {
+      // 나머지 연산으로 생기는 편향을 없애기 위해 범위를 벗어난 값은 버리고 다시 뽑는다.
+      var limit = Math.floor(0x100000000 / size) * size;
+      var buf = new Uint32Array(1);
+      do { window.crypto.getRandomValues(buf); } while (buf[0] >= limit);
+      return buf[0] % size;
+    }
+    return Math.floor(Math.random() * size);
+  }
+
+  function finish(id) {
+    rolling = false;
+    state.drawnIds.push(id);
+    state.lastName = state.names[id];
+    saveOrWarn();
+    render();
+    el.name.classList.remove("rolling", "pop");
+    void el.name.offsetWidth; // 애니메이션 재시작을 위한 리플로우
+    el.name.classList.add("pop");
+  }
+
+  function draw() {
+    if (rolling) return;
+
+    if (state.names.length === 0) {
+      toast("먼저 명단을 입력해 주세요");
+      openPanel();
+      return;
+    }
+
+    var pool = remainingIds();
+    if (pool.length === 0) {
+      toast("모두 뽑았습니다. '처음으로'를 눌러 주세요");
+      return;
+    }
+
+    var picked = pool[randomIndex(pool.length)];
+
+    // 이름이 빠르게 지나가다 서서히 느려지며 멈추는 연출
+    rolling = true;
+    el.name.classList.remove("idle", "pop");
+    el.name.classList.add("rolling");
+    el.drawBtn.disabled = true;
+
+    var startedAt = Date.now();
+    var shown = -1;
+
+    (function tick() {
+      var t = (Date.now() - startedAt) / ROLL_MS;
+      if (t >= 1) {
+        finish(picked);
+        return;
+      }
+
+      // 남은 학생이 한 명뿐이어도 이름이 바뀌는 것처럼 보이도록 명단 전체에서 고른다.
+      var source = pool.length > 1 ? pool : allIds();
+      var next;
+      do {
+        next = source[randomIndex(source.length)];
+      } while (source.length > 1 && next === shown);
+      shown = next;
+      el.name.textContent = state.names[next];
+
+      // 간격이 점점 벌어져 끝으로 갈수록 눈에 띄게 느려진다.
+      setTimeout(tick, ROLL_MIN + (ROLL_MAX - ROLL_MIN) * Math.pow(t, 3));
+    })();
+  }
+
+  function reset() {
+    if (rolling) return; // 연출 중에는 상태를 건드리지 않는다
+    if (state.drawnIds.length === 0) {
+      toast("아직 뽑은 학생이 없습니다");
+      return;
+    }
+    if (!confirm("뽑기 기록을 모두 지우고 처음 상태로 되돌릴까요? (명단은 그대로 남습니다)")) return;
+    state.drawnIds = [];
+    state.lastName = "";
+    saveOrWarn();
+    render();
+  }
+
+  /* ── 명단 편집 ─────────────────────────────────── */
+
+  function openPanel() {
+    el.names.value = state.names.join("\n");
+    el.panel.hidden = false;
+    el.names.focus();
+  }
+
+  function closePanel() {
+    el.panel.hidden = true;
+  }
+
+  function saveNames() {
+    if (rolling) return; // 연출 중에는 상태를 건드리지 않는다
+    var parsed = el.names.value
+      .split(/[\n,]/)
+      .map(function (n) { return n.trim(); })
+      .filter(function (n) { return n.length > 0; });
+
+    state.names = parsed;
+    state.drawnIds = [];
+    state.lastName = "";
+    var stored = save();
+    render();
+    closePanel();
+
+    if (parsed.length === 0) {
+      toast("명단을 비웠습니다");
+    } else if (stored) {
+      toast(parsed.length + "명 저장했습니다");
+    } else {
+      // 저장이 막힌 브라우저에서 "저장했습니다"라고 하면 안 된다.
+      toast(parsed.length + "명 적용했습니다 (이 브라우저에서는 창을 닫으면 사라집니다)");
+    }
+  }
+
+  // 전체화면은 브라우저·보안 설정에 따라 거부될 수 있다.
+  // 거부되어도 콘솔 오류로 새어 나가지 않고 안내만 띄운다.
+  function toggleFullscreen() {
+    try {
+      var p;
+      if (document.fullscreenElement) {
+        p = document.exitFullscreen && document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        p = document.documentElement.requestFullscreen();
+      } else {
+        toast("이 브라우저에서는 전체화면을 쓸 수 없습니다 (F11을 눌러 보세요)");
+        return;
+      }
+      if (p && typeof p.catch === "function") {
+        p.catch(function () { toast("전체화면이 차단되었습니다 (F11을 눌러 보세요)"); });
+      }
+    } catch (e) {
+      toast("전체화면이 차단되었습니다 (F11을 눌러 보세요)");
+    }
+  }
+
+  /* ── 이벤트 ────────────────────────────────────── */
+
+  el.drawBtn.addEventListener("click", draw);
+  el.resetBtn.addEventListener("click", reset);
+  el.editBtn.addEventListener("click", function () {
+    if (el.panel.hidden) openPanel(); else closePanel();
+  });
+  el.saveBtn.addEventListener("click", saveNames);
+  el.cancelBtn.addEventListener("click", closePanel);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target === el.names) {
+      if (e.key === "Escape") closePanel();
+      return;
+    }
+    if (e.key === " " || e.key === "Enter") {
+      // 버튼에 포커스가 있으면 브라우저 기본 클릭에 맡긴다.
+      if (e.target.tagName === "BUTTON") return;
+      e.preventDefault();
+      draw();
+    } else if (e.key === "f" || e.key === "F" || e.key === "ㄹ") {
+      toggleFullscreen();
+    } else if (e.key === "Escape") {
+      closePanel();
+    }
+  });
+
+  load();
+  render();
+  if (state.names.length === 0) openPanel();
+})();
+</script>
+
+</body>
+</html>
